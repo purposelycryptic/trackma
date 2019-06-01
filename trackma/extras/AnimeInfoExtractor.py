@@ -41,7 +41,7 @@ class AnimeInfoExtractor():
         self.version = 1
         self.name = ''
         self.pv = -1
-        self._processFilename()
+        #self._processFilename()
 
     def getName(self):
         return self.name
@@ -245,6 +245,15 @@ class AnimeInfoExtractor():
             if m:
                 self.episodeStart = Decimal(m.group(2))
                 filename = filename[:m.start() + 1]
+        # START ADDITION - 2019/06/01 - By purposelycryptic
+        # Check if there is an series or episode specifier, and excluding '(YYYY)' elements
+        if not self.episodeStart:            
+            #m = re.search('[^0-9a-zA-Z](((?:(?:s\d{1,2}|S\d{1,2})+)(?:E\.?|Ep(?:i|isode)?s?(?: |\.)+))|(?:E\.?|Ep(?:i|isode)?s?(?: |\.)?))?(\d{1,4}(?!\)))(?:[^0-9a-zA-Z]|$)', filename, flags=re.IGNORECASE)        ALTERNATE REGEX VARIANT - use capture group 3
+            m = re.search('[^0-9a-zA-Z]((?:(?:s\d{1,2}|S\d{1,2})?)(?:E\.?|Ep(?:i|isode)?s?(?: |\.)?))?(\d{1,4}(?!\)))(?:[^0-9a-zA-Z]|$)', filename, flags=re.IGNORECASE)
+            if m:
+                self.episodeStart = Decimal(m.group(2))
+                filename = filename[:m.start() + 1]
+        # ADDITION END
         if not self.episodeStart:
             # Check any remaining lonely numbers as episode (towards the end has priority)
             # First try outside brackets
@@ -264,6 +273,15 @@ class AnimeInfoExtractor():
         # Unfortunately its very hard to know if there should be brackets in the title...
         # We really should strip brackets... so to anything with brackets in the title: sorry =(
         # Strip anything thats still in brackets, but backup the first case incase it IS the title...
+        
+        # START ADDITION PART 1 - 2019/06/01 - By purposelycryptic
+        # Restore Year when part of series name in '(YYYY)' format.
+        y = re.search('( \(\d{4}\))', filename)
+        if y:
+            year = y.group(1)
+        else:
+            year = ''
+        # ADDITION PART 1 END
         m = re.search('\[([^\. ].*?)\]', filename)
         backup_title = ''
         if m:
@@ -284,13 +302,17 @@ class AnimeInfoExtractor():
         filename = re.sub('  (?:.*)', '', filename)
         # Strip any unclosed brackets and anything after them
         filename = re.sub('(.*)(?:[\(\[({].*)$', r'\1', filename)
-        self.name = filename.strip(' -')
-        if self.name == '':
+        # START ADDITION PART 2 (EDIT) - 2019/06/01 - By purposelycryptic
+        # Restore Year when part of series name in '(YYYY)' format.
+        yearrestore = filename.strip(' -')
+        self.name = yearrestore + year
+        if self.name == year:
             self.name = backup_title
         # If we have a subber but no title!? then it must have been a title...
-        if self.name == '' and self.subberTag != '':
-            self.name = self.subberTag
+        if self.name == year and self.subberTag != '':
+            self.name = self.subberTag + year
             self.subberTag = ''
+        # ADDITION PART 2 (EDIT) END
 
     def _processFilename(self):
         filename = self.originalFilename
