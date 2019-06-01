@@ -41,7 +41,7 @@ class AnimeInfoExtractor():
         self.version = 1
         self.name = ''
         self.pv = -1
-        #self._processFilename()
+        self._processFilename()
 
     def getName(self):
         return self.name
