@@ -45,6 +45,17 @@ class AnimeInfoExtractor():
 
     def getName(self):
         return self.name
+        
+    def __testIfEp(self, filename):
+        # Test if file is an episode or Special/Supplementary File, and force a failure condiion if this is the case, to avoid false positives
+        z = re.search(r"((?P<show>.*?)[ _\.\-]+)((?P<spec>PV|SP|OP|ED)(([ _\.]+(?P<epa>\d{1,2}[a-u|w-z]?))|(?P<epb>\d{1,2}[a-u|w-z]?)|([ _\.]+)))+[ _\.]?(?P<version>V\d{1,2})?([ _\.\-]+(?P<eptitle>.^\[*))?", filename, flags=re.IGNORECASE)
+        if z is None:
+           z = re.search(r"((?P<show>.*?)[ _\.\-]+)(?P<spec>NCOP|OPENING|NCED|ENDING|SPECIAL|TRAILER|PROMO|OTHER)[ _\.]?(?P<ep>\d{1,2}[a-u|w-z]?)?[ _\.]?(?P<version>V\d{1,2})?([ _\.\-]+(?P<eptitle>.^\[*))?", filename, flags=re.IGNORECASE)
+           if z is None:
+               return filename        
+        filename = "File is a " + z.group('spec')
+        self.name = "File is a " + z.group('spec')
+        return filename
 
     def getEpisodeNumbers(self, force_numbers=False):
         ep_start = self.episodeStart
@@ -239,21 +250,13 @@ class AnimeInfoExtractor():
                 self.episodeStart = Decimal(m.group(1))
                 self.episodeEnd = Decimal(m.group(2))
                 filename = filename[:m.start() + 1]
-        if not self.episodeStart:
-            # Check if there is an episode specifier
-            m = re.search('(?:[^0-9a-zA-Z])(E\.?|Ep(?:i|isode)?(?: |\.)?)(\d{1,}(?:\.\d{1})?)(?:[^\d]|$)', filename, flags=re.IGNORECASE)
-            if m:
-                self.episodeStart = Decimal(m.group(2))
-                filename = filename[:m.start() + 1]
-        # START ADDITION - 2019/06/01 - By purposelycryptic
         # Check if there is an series or episode specifier, and excluding '(YYYY)' elements
         if not self.episodeStart:            
-            #m = re.search('[^0-9a-zA-Z](((?:(?:s\d{1,2}|S\d{1,2})+)(?:E\.?|Ep(?:i|isode)?s?(?: |\.)+))|(?:E\.?|Ep(?:i|isode)?s?(?: |\.)?))?(\d{1,4}(?!\)))(?:[^0-9a-zA-Z]|$)', filename, flags=re.IGNORECASE)        ALTERNATE REGEX VARIANT - use capture group 3
-            m = re.search('[^0-9a-zA-Z]((?:(?:s\d{1,2}|S\d{1,2})?)(?:E\.?|Ep(?:i|isode)?s?(?: |\.)?))?(\d{1,4}(?!\)))(?:[^0-9a-zA-Z]|$)', filename, flags=re.IGNORECASE)
+            m = re.search('(^|(?P<show>.*?(?=[ _\.\-]+\d{2,3}|[ _\.\-]+ep\d{2,3}|[ _\.\-]+e\d{2,3}|[ _\.\-]+s\d{1,2}))[ _\.\-]+)((?:(?:s\d{1,2}|S\d{1,2})?)(?:[E\.]*?|Ep(?:i|isode)?s?(?: |\.)?))?(?P<epnum>\d{1,3})(?!\))(?:\d{1,4})?(?:\W|$)', filename, flags=re.IGNORECASE)
             if m:
-                self.episodeStart = Decimal(m.group(2))
-                filename = filename[:m.start() + 1]
-        # ADDITION END
+                self.episodeStart = Decimal(m.group('epnum'))
+                filename = m.group('show')
+                #filename = filename[:m.start() + 1]
         if not self.episodeStart:
             # Check any remaining lonely numbers as episode (towards the end has priority)
             # First try outside brackets
@@ -270,39 +273,46 @@ class AnimeInfoExtractor():
         return filename
 
     def __extractShowName(self, filename):
-        # Unfortunately its very hard to know if there should be brackets in the title...
-        # We really should strip brackets... so to anything with brackets in the title: sorry =(
-        # Strip anything thats still in brackets, but backup the first case incase it IS the title...
-        
-        # START ADDITION PART 1 - 2019/06/01 - By purposelycryptic
-        # Restore Year when part of series name in '(YYYY)' format.
-        y = re.search('( \(\d{4}\))', filename)
-        if y:
-            year = y.group(1)
-        else:
-            year = ''
-        # ADDITION PART 1 END
-        m = re.search('\[([^\. ].*?)\]', filename)
-        backup_title = ''
-        if m:
-            backup_title = m.group(1)
-            filename = filename[:m.start()] + filename[m.end():]
-        else:
-            m = re.search('\(([^\. ].*?)\)', filename)
+        # Unfortunately, it is very hard to know whether there should be brackets in the title...
+        # As such, we really should strip all brackets, as well as their contents...
+        # So, to anything with brackets as part of its legitimate title: Sorry =(
+        #
+        # But, before we do so, we will save the first instance to a backup string,
+        # just in case it actually IS the title.
+        #
+        #   We will also check for Year-in-Round-Brackets, (YYYY), often used as part of
+        #   official series naming schemes as a suffix, usuallly in the case of sequels or remakes.
+        #   If found, we will save it, and re-add it to the title as a suffix, 
+        #   AFTER we have stripped everything else in brackets.
+
+        year = ''                                                           # initialize 'year' as blank string
+        backup_title = ''                                                   # initialize 'backup_title' as blank string
+        y = re.search('(?P<year> \(\d{4}\))', filename)                     # Check for Year when used as part of a series name as suffix in ' (YYYY)' format.
+        if y:                                                               # If Year found...
+            year = y.group('year')                                          # Save to 'year' string
+            
+        m = re.search('\[(?P<backup_title>[^\. ].*?)\]', filename)          # Search for and capture the any string in square brackets that does not begin with either a period or space. The brackets themselves ae not captured, but ARE part of the match.
+        if m:                                                               # If one or more matching strings is found...
+            backup_title = m.group('backup_title')                          # Save the first capture group to the 'backup_title' string...
+            filename = filename[:m.start()] + filename[m.end():]            # Then strip the match from the 'filename' string.
+            
+        else:                                                               # If no matching strings are found...
+            m = re.search('\((?P<backup_title>[^\. ].*?)\)', filename)      # Repeat the above, this time using round brackets.
             if m:
-                backup_title = m.group(1)
+                backup_title = m.group('backup_title')
                 filename = filename[:m.start()] + filename[m.end():]
-            else:
-                m = re.search('{([^\. ].*?)}', filename)
+                
+            else:                                                           # If no matching strings are found once again...
+                m = re.search('{(?P<backup_title>[^\. ].*?)}', filename)    # Repeat again, this time using curly brackets.
                 if m:
-                    backup_title = m.group(1)
+                    backup_title = m.group('backup_title')
                     filename = filename[:m.start()] + filename[m.end():]
+                    
         filename = re.sub('(?:\[.*?\])|(?:\(.*?\))', ' ', filename)
         filename = filename.strip(' -')
         filename = re.sub('  (?:.*)', '', filename)
         # Strip any unclosed brackets and anything after them
         filename = re.sub('(.*)(?:[\(\[({].*)$', r'\1', filename)
-        # START ADDITION PART 2 (EDIT) - 2019/06/01 - By purposelycryptic
         # Restore Year when part of series name in '(YYYY)' format.
         yearrestore = filename.strip(' -')
         self.name = yearrestore + year
@@ -312,10 +322,10 @@ class AnimeInfoExtractor():
         if self.name == year and self.subberTag != '':
             self.name = self.subberTag + year
             self.subberTag = ''
-        # ADDITION PART 2 (EDIT) END
 
     def _processFilename(self):
         filename = self.originalFilename
+        filename = self.__testIfEp(filename)
         filename = self.__extractExtension(filename)
         filename = self.__cleanUpSpaces(filename)
         filename = self.__extractSpecialTags(filename)
