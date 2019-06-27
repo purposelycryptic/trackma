@@ -7,5 +7,6 @@
 *.log
 .trackma
 *.egg-info
+.vs
 build
 dist
