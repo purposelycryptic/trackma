@@ -45,17 +45,7 @@ class AnimeInfoExtractor():
 
     def getName(self):
         return self.name
-        
-    def __testIfEp(self, filename):
-        # Test if file is an episode or Special/Supplementary File, and force a failure condiion if this is the case, to avoid false positives
-        z = re.search(r"((?P<show>.*?)[ _\.\-]+)((?P<spec>PV|SP|OP|ED)(([ _\.]+(?P<epa>\d{1,2}[a-u|w-z]?))|(?P<epb>\d{1,2}[a-u|w-z]?)|([ _\.]+)))+[ _\.]?(?P<version>V\d{1,2})?([ _\.\-]+(?P<eptitle>.^\[*))?", filename, flags=re.IGNORECASE)
-        if z is None:
-           z = re.search(r"((?P<show>.*?)[ _\.\-]+)(?P<spec>NCOP|OPENING|NCED|ENDING|SPECIAL|TRAILER|PROMO|OTHER)[ _\.]?(?P<ep>\d{1,2}[a-u|w-z]?)?[ _\.]?(?P<version>V\d{1,2})?([ _\.\-]+(?P<eptitle>.^\[*))?", filename, flags=re.IGNORECASE)
-           if z is None:
-               return filename        
-        filename = "File is a " + z.group('spec')
-        self.name = "File is a " + z.group('spec')
-        return filename
+
 
     def getEpisodeNumbers(self, force_numbers=False):
         ep_start = self.episodeStart
@@ -74,6 +64,18 @@ class AnimeInfoExtractor():
         ep = ep if ep is not None else 1
 
         return int(ep)
+
+        
+    def __testIfEp(self, filename):
+        # Test if file is an episode or Special/Supplementary File, and force a failure condiion if this is the case, to avoid false positives
+        z = re.search(r"((?P<show>.*?)[ _\.\-]+)((?P<spec>PV|SP|OP|ED)(([ _\.]+(?P<epa>\d{1,2}[a-u|w-z]?))|(?P<epb>\d{1,2}[a-u|w-z]?)|([ _\.]+)))+[ _\.]?(?P<version>V\d{1,2})?([ _\.\-]+(?P<eptitle>.^\[*))?", filename, flags=re.IGNORECASE)
+        if z is None:
+           z = re.search(r"((?P<show>.*?)[ _\.\-]+)(?P<spec>NCOP|OPENING|NCED|ENDING|SPECIAL|TRAILER|PROMO|OTHER)[ _\.]?(?P<ep>\d{1,2}[a-u|w-z]?)?[ _\.]?(?P<version>V\d{1,2})?([ _\.\-]+(?P<eptitle>.^\[*))?", filename, flags=re.IGNORECASE)
+           if z is None:
+               return filename        
+        filename = "File is a " + z.group('spec')
+        self.name = "File is a " + z.group('spec')
+        return filename        
 
     def __extractExtension(self, filename):
         m = re.search("\.(\w{3})$", filename)
